@@ -25,7 +25,7 @@ def raw_acronyms(acronyms, words)
     acronyms.each {|candidate_acronym| working_acronyms.push(candidate_acronym.join)}
     i = 0
     working_acronyms.each do |acronym|
-	list[acronym] = words[i].join(" ")
+	list[acronym] = words[i].map(&:capitalize).join(" ")
 	i = i + 1
     end
     return list
@@ -48,7 +48,7 @@ def dictionary_acronyms(acronyms, words)
     i = 0
     working_acronyms.each do |acronym|
 	if dict[acronym] == true
-	    list[acronym] = words[i].join(" ")
+	    list[acronym] = words[i].map(&:capitalize).join(" ")
 	end
 	i = i + 1
     end
@@ -62,21 +62,22 @@ end
 # list = a hash containing acronyms (key) and associated phrases (value)
 def output(msg, file, list)
     header = "\n== Acronym Maker Output ==\n\n"
-    if ! file == ""
+    if file != ""
 	if File.exists?(file)
-	    open(file, 'a') do |f|
-		f.puts msg
+	    File.open(file, 'a') do |f|
+		f.write msg
 		list.each do |acronym, words|
-		    f.puts = "#{acronym.upcase} \t #{words.capitalize}"
+		    f.write("#{acronym.upcase} \t #{words}\n")
 		end
 	    end
 	else
 	    begin
-		File.open(file, w) do |f|
-		    f.puts header
-		    f.puts msg
+		f = File.new(file, "w+")
+		File.open(f, "w") do |f|
+		    f.write header
+		    f.write msg
 		    list.each do |acronym, words|
-			f.puts = "#{acronym.upcase} \t #{words.capitalize}\n"
+			f.write("#{acronym.upcase} \t #{words}\n")
 		    end
 		end
 	    rescue
@@ -87,7 +88,7 @@ def output(msg, file, list)
     else
 	puts header
 	puts msg
-	list.each {|acronym, words| puts "#{acronym.upcase} \t #{words.capitalize}\n"}
+	list.each {|acronym, words| puts "#{acronym.upcase} \t #{words}\n"}
     end
 end
 
@@ -101,46 +102,57 @@ optparse = OptionParser.new do |opts|
    opts.banner = "Usage: Create acronyms from a simple list of words or phrases."
 
    options[:d] = true
-   opts.on("-d", "--dict dict", "Cross-reference acronyms with dictionary.") do |dict|
-	options[:d] = dict	
+   opts.on("-d", "--[no-]dictionary", "Do not cross-reference acronyms with dictionary.") do |dict|
+	options[:d] = false	
    end
 
    options[:n] = ""
-   opts.on("-n", "--num number", "The number (or range) of characters to use in generated acronyms.") do |number|
+   opts.on("-n", "--number [x-y]x", "The number x or range x-y of characters to use in generated acronyms.") do |number|
 	options[:n] = number
    end
    
    options[:l] = 1
-   opts.on("-l", "--limit", "Restrict acronym characters to the first x characters of each word.") do |limit|
+   opts.on("-l", "--limit x", Integer, "Restrict acronym characters to the first x characters of each word.") do |limit|
 	options[:l] = limit
 	puts "Caution: The -l flag has not yet been implemented. Acronyms will be limited to the first letter of each word supplied.\n"
    end
    
    options[:r] = false
-   opts.on("-r", "--order", "true = maintain word order; false = do not maintain word order") do |order|
-	options[:r] = order
+   opts.on("-r", "--[no-]order", "Maintain word list order for generating acronyms.") do |order|
+	options[:r] = true
    end
    
    options[:o] = ""
-   opts.on("-o", "--out", "The name (and path if not the current directory) of the output file.") do |output|
+   opts.on("-o", "--out FILENAME", "The name (and path if not the current directory) of the output file.") do |output|
 	options[:o] = output
    end
    
-   options[:p] = false
-   opts.on("-p", "--phrase", "true = only include first letter; false = include first letter of each word.") do |phrase|
-	options[:p] = phrase
-	puts "Caution: The -p flag has not yet been implemented. Only first letters will be used to generate acronyms.\n"
+   options[:s] = false
+   opts.on("-s", "--[no-]separate", "Treat each word in a phrase separately.") do |phrase|
+	options[:s] = true
+	puts "Caution: The -s flag has not yet been implemented. Only first letters will be used to generate acronyms.\n"
    end
    
    # Display the help screen.
-	opts.on( "-h", "--help", "Display this screen") do
-		puts opts
-		exit
-	end
+    opts.on( "-h", "--help", "Display this screen") do
+	puts opts
+	exit
+    end
 end
 
 # This is the parser
 optparse.parse!
+
+
+# Capture all the words that will be used to create acronyms in an array.
+words_array = Array.new
+
+ARGF.each_line {|line| words_array.push(line.downcase.strip)}
+
+# This hash will hold letters as arrays indexed by the supplied words.
+letters = Hash.new
+words_array.each {|word| letters[word] = word.scan(/./)}
+# binding.pry
 
 # Determine the length of acronym to be generated based on user input
 if options[:n].to_s.include?("-")
@@ -153,27 +165,21 @@ if options[:n].to_s.include?("-")
 	puts msg
 	exit
     end
+    if nmax > words_array.length
+	nmax = words_array.length
+    end
 else
     begin
-	n = options[:n].to_i
+	if options[:n] == "" || options[:n].to_i > words_array.length
+	    n = words_array.length
+	else
+	    n = options[:n].to_i
+	end
     rescue
 	msg = "Error: there is a problem with the number of characters to be used for generating acronyms."
 	puts msg
 	exit
     end
-end
-
-# Capture all the words that will be used to create acronyms in an array.
-words_array = Array.new
-ARGF.each_line {|line| words_array.push(line.downcase.strip)}
-
-# This hash will hold letters as arrays indexed by the supplied words.
-letters = Hash.new
-words_array.each {|word| letters[word] = word.scan(/./)}
-
-# The maximum number of letters in the generated acronyms cannot exceed the number of words provided.
-if nmax > words_array.length
-   nmax = words_array.length
 end
 
 # Create an array to hold the first letters of every word; letters to be used in acronym generation.
@@ -183,8 +189,10 @@ words_array.each {|word| acarray.push(letters[word][0])}
 # Either a named file or output to standard output if left blank.
 file = options[:o]
 
-# Make use of Ruby"s permutation or combination functions--because they"re awesome!!
-if n == ""
+# This is the application logic.
+# Start by testing n; if n == "" then just generate acronyms of length corresponding to the number of words provided.
+if n == words_array.length 
+    # Maintain the letter order according to the order the words were provided if options[:r] == true
     if options[:r] == false
 	acronyms = acarray.permutation.to_a
 	words = words_array.permutation.to_a
@@ -195,18 +203,18 @@ if n == ""
 	puts "Error: the -r flag only accepts true if order matters or false if it doesn't."
 	exit
     end
-    length = words.length
+    length = words_array.length
+
+    # options[:d] cross references a dictionary to ensure generated acronyms are actual words.
     if options[:d] == true
-	msg = "All #{length}-letter acronyms that are actual words.\n\n"
+	msg = "\nAll #{length}-letter acronyms that are actual words.\n\n"
 	list = dictionary_acronyms(acronyms, words)
     else
-	msg = "All #{length}-letter acronyms; not necessarily actual words.\n\n"
+	msg = "\nAll #{length}-letter acronyms; not necessarily actual words.\n\n"
 	list = raw_acronyms(acronyms, words)
     end
-    
-    # output(msg, format, file, list)
     output(msg, file, list)
-elsif n.length > 1
+elsif n.kind_of?(Array)
 
     # Create an array with all numbers between the supplied minimum and maximum
     i = *(nmin .. nmax)
@@ -224,15 +232,15 @@ elsif n.length > 1
 	    exit
 	end
 	if options[:d] == true
-	    msg = "All #{num}-letter acronyms that are actual words.\n\n"
+	    msg = "\nAll #{num}-letter acronyms that are actual words.\n\n"
 	    list = dictionary_acronyms(acronyms, words)
 	else
-	    msg = "All #{num}-letter acronyms; not necessarily actual words.\n\n"
+	    msg = "\nAll #{num}-letter acronyms; not necessarily actual words.\n\n"
 	    list = raw_acronyms(acronyms, words)
 	end
 	output(msg, file, list)
     end
-elsif n.length == 1
+else
     if options[:r] == false
 	acronyms = acarray.permutation(n).to_a
 	words = words_array.permutation(n).to_a
@@ -244,12 +252,13 @@ elsif n.length == 1
 	exit
     end
     if options[:d] == true
-	msg = "All #{n}-letter acronyms that are actual words.\n\n"
+	msg = "\nAll #{n}-letter acronyms that are actual words.\n\n"
 	list = dictionary_acronyms(acronyms, words)
     else
-	msg = "All #{n}-letter acronyms; not necessarily actual words.\n\n"
+	msg = "\nAll #{n}-letter acronyms; not necessarily actual words.\n\n"
 	list = raw_acronyms(acronyms, words)
     end
     output(msg, file, list)
 end
-	
+
+
